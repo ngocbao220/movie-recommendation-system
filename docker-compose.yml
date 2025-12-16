@@ -1,0 +1,43 @@
+services:
+  # Service 1: Dành cho việc Train và Nghiên cứu (Jupyter Lab)
+  # Các thành viên team dùng cái này để code cả 3 mô hình
+  lab:
+    container_name: movie-lab
+    build: .
+    ports:
+      - "8888:8888" # Cổng Jupyter
+      - "4040:4040" # Cổng giám sát Spark UI
+    volumes:
+      - ./:/home/jovyan/work # Map toàn bộ thư mục dự án vào trong
+    environment:
+      - JUPYTER_ENABLE_LAB=yes
+      - JUPYTER_TOKEN=team123
+    command: start-notebook.sh --NotebookApp.token='team123'
+
+  process-data:
+    container_name: process-lab
+    build: .
+    volumes:
+      - ./:/home/jovyan/work
+    command: python src/process_data.py
+    depends_on:
+      - lab   
+
+  # Service 2: Dành cho Giao diện Web (Streamlit)
+  # Chạy tách biệt để không ảnh hưởng đến việc train
+  app:
+    container_name: movie-app
+    build: .
+    ports:
+      - "8501:8501"
+    volumes:
+      - ./:/home/jovyan/work
+    # Tự động chạy lại web khi sửa code
+    command: streamlit run src/ui/main.py --server.port=8501 --server.address=0.0.0.0
+    depends_on:
+      - lab
+
+  # Service 3 (Tùy chọn): Nếu Model 2 quá nặng cần GPU riêng
+  # model-training-worker:
+  #   ...
+  
