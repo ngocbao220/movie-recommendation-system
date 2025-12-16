@@ -7,7 +7,7 @@ from pyspark.sql import functions as F
 
 # --- CẤU HÌNH ---
 INPUT_PATH = "data/processed/model1_rules"
-OUTPUT_PATH = "models/model_1_rules/artifacts/rules.parquet"
+OUTPUT_PATH = "checkpoints/model_1_rules/rules.parquet"
 
 # TĂNG LÊN 0.05 ĐỂ CHẠY NHANH HƠN (Test luồng)
 # Sau khi chạy thành công, bạn có thể giảm xuống 0.02 sau
