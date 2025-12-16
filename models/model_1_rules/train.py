@@ -1,19 +1,17 @@
 import sys
 import os
+import time
 from pyspark.sql import SparkSession
 from pyspark.ml.fpm import FPGrowth
 from pyspark.sql import functions as F
 
 # --- CẤU HÌNH ---
-# Đường dẫn input (đầu ra của bước process_data vừa rồi)
 INPUT_PATH = "data/processed/model1_rules"
-# Đường dẫn output (nơi lưu file luật kết quả)
 OUTPUT_PATH = "models/model_1_rules/artifacts/rules.parquet"
 
-# Tham số mô hình
-# minSupport=0.02: Phim/Cặp phim phải xuất hiện trong 2% số lượng giao dịch (khoảng 32M * 0.02 user)
-MIN_SUPPORT = 0.02 
-# minConfidence=0.1: Nếu xem A, có ít nhất 10% khả năng xem B
+# TĂNG LÊN 0.05 ĐỂ CHẠY NHANH HƠN (Test luồng)
+# Sau khi chạy thành công, bạn có thể giảm xuống 0.02 sau
+MIN_SUPPORT = 0.05 
 MIN_CONFIDENCE = 0.1
 
 def main():
@@ -22,54 +20,54 @@ def main():
         .appName("Train_Model_1_Rules") \
         .config("spark.driver.memory", "8g") \
         .config("spark.executor.memory", "8g") \
+        .config("spark.sql.shuffle.partitions", "100") \
         .getOrCreate()
 
-    # 1. Load dữ liệu đã xử lý
     print(f"📂 Đang đọc dữ liệu từ {INPUT_PATH}...")
     if not os.path.exists(INPUT_PATH):
-        print(f"❌ Lỗi: Không tìm thấy thư mục {INPUT_PATH}. Hãy chạy process_data.py trước!")
+        print("❌ Lỗi: Không tìm thấy data.")
         return
 
     df = spark.read.parquet(INPUT_PATH)
-    # Dữ liệu lúc này có dạng: [userId, items (Array[String])]
     
-    print("🧹 Đang loại bỏ các phim trùng lặp trong từng user transaction...")
-    # array_distinct: Hàm này sẽ biến ['A', 'B', 'A'] thành ['A', 'B']
-    df = df.withColumn("items", F.array_distinct(F.col("items")))
-    
-    # Cache để chạy nhanh hơn
-    df.cache()
-    print(f"✅ Đã load {df.count()} giao dịch (user baskets).")
+    # --- BƯỚC QUAN TRỌNG: CLEAN TRƯỚC, CACHE SAU ---
+    print("🧹 Đang loại bỏ phim trùng lặp...")
+    df_clean = df.withColumn("items", F.array_distinct(F.col("items")))
 
-    # 2. Định nghĩa thuật toán FPGrowth
-    print(f"🛠  Đang cấu hình FPGrowth (Support: {MIN_SUPPORT}, Confidence: {MIN_CONFIDENCE})...")
+    print("💾 Đang nạp dữ liệu vào RAM (Caching)...")
+    # Cache dữ liệu sạch để FPGrowth dùng đi dùng lại
+    df_clean.cache()
+    
+    # Gọi count() để ÉP Spark thực thi việc cache ngay lập tức
+    count = df_clean.count()
+    print(f"✅ Đã cache xong {count} dòng dữ liệu vào RAM.")
+
+    # --- TRAIN ---
+    print(f"🛠  Bắt đầu Train FPGrowth (Support: {MIN_SUPPORT})...")
+    start_time = time.time()
+    
     fp = FPGrowth(itemsCol="items", 
                   minSupport=MIN_SUPPORT, 
                   minConfidence=MIN_CONFIDENCE)
 
-    # 3. Train (Giai đoạn tốn thời gian nhất)
-    print("⏳ Đang train mô hình (việc này có thể mất vài phút)...")
-    model = fp.fit(df)
-
-    # 4. Lấy kết quả luật kết hợp
-    # Kết quả gồm các cột: antecedents (nguyên nhân), consequents (kết quả), confidence, lift, support
-    rules = model.associationRules
+    model = fp.fit(df_clean)
     
+    print(f"⏱  Train xong trong {round(time.time() - start_time, 2)} giây.")
+
+    # --- KẾT QUẢ ---
+    rules = model.associationRules
     rule_count = rules.count()
     print(f"🎉 Đã tìm thấy {rule_count} luật kết hợp!")
 
-    if rule_count == 0:
-        print("⚠️ Cảnh báo: Không tìm thấy luật nào. Hãy thử GIẢM minSupport xuống thấp hơn (vd: 0.01).")
-    else:
-        # Xem thử 5 luật mạnh nhất (theo Lift)
+    if rule_count > 0:
         print("--- Top 5 luật mạnh nhất ---")
         rules.sort(F.col("lift").desc()).show(5, truncate=False)
-
-        # 5. Lưu kết quả
+        
         print(f"💾 Đang lưu luật vào {OUTPUT_PATH}...")
-        # Lưu đè (overwrite) nếu file đã tồn tại
         rules.write.mode("overwrite").parquet(OUTPUT_PATH)
         print("✅ Lưu thành công!")
+    else:
+        print("⚠️ Không tìm thấy luật nào. Hãy giảm minSupport.")
 
     spark.stop()
 

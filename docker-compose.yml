@@ -2,6 +2,7 @@ services:
   # Service 1: Dành cho việc Train và Nghiên cứu (Jupyter Lab)
   # Các thành viên team dùng cái này để code cả 3 mô hình
   lab:
+    container_name: movie-lab
     build: .
     ports:
       - "8888:8888" # Cổng Jupyter
@@ -12,8 +13,9 @@ services:
       - JUPYTER_ENABLE_LAB=yes
       - JUPYTER_TOKEN=team123
     command: start-notebook.sh --NotebookApp.token='team123'
-  
+
   process-data:
+    container_name: process-lab
     build: .
     volumes:
       - ./:/home/jovyan/work
@@ -24,6 +26,7 @@ services:
   # Service 2: Dành cho Giao diện Web (Streamlit)
   # Chạy tách biệt để không ảnh hưởng đến việc train
   app:
+    container_name: movie-app
     build: .
     ports:
       - "8501:8501"
