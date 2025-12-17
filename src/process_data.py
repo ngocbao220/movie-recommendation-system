@@ -1,118 +1,127 @@
 import os
+import re
+import gc # Import Garbage Collector to force memory cleanup
 from pyspark.sql import SparkSession
 from pyspark.sql import functions as F
 from pyspark.ml.feature import StringIndexer
+from pyspark.sql.types import StringType
 
-# --- CẤU HÌNH ---
+# --- CONFIGURATION ---
 RAW_PATH = "data/raw"
 OUTPUT_PATH = "data/processed"
 
-# Ngưỡng lọc dữ liệu (Để giảm nhiễu và tăng tốc độ train)
-MIN_USER_RATINGS = 5   # User phải rate ít nhất 5 phim mới được giữ lại
-MIN_MOVIE_RATINGS = 10 # Phim phải có ít nhất 10 người rate mới được giữ lại
-MIN_RATING_FOR_RULES = 3.5 # Rating >= 3.5 được coi là "Thích" cho luật kết hợp
+# Filtering Thresholds
+MIN_USER_RATINGS = 5
+MIN_MOVIE_RATINGS = 10
+MIN_RATING_FOR_RULES = 3.5
+
+def clean_title_logic(title):
+    if not title: return title
+    title = title.strip()
+    match = re.match(r'^(.*),\s(The|A|An|Les|Le|La)\s\((\d{4})\)$', title)
+    if match: return f"{match.group(2)} {match.group(1)} ({match.group(3)})"
+    match_no_year = re.match(r'^(.*),\s(The|A|An|Les|Le|La)$', title)
+    if match_no_year: return f"{match_no_year.group(2)} {match_no_year.group(1)}"
+    return title
 
 def main():
-    # 1. Khởi tạo Spark với cấu hình bộ nhớ cao (cho data 32M)
-    print("🚀 Đang khởi động Spark Session...")
+    print("🚀 Starting Spark Session...")
+    # Keep 4g. If you crash again, ensure your Docker/Host has enough RAM.
     spark = SparkSession.builder \
         .appName("MovieLens_Preprocessing") \
-        .config("spark.driver.memory", "8g") \
-        .config("spark.executor.memory", "8g") \
+        .config("spark.driver.memory", "4g") \
+        .config("spark.executor.memory", "4g") \
+        .config("spark.sql.shuffle.partitions", "200") \
+        .config("spark.driver.maxResultSize", "2g") \
         .getOrCreate()
 
-    # 2. Load dữ liệu thô
-    print("📂 Đang đọc dữ liệu từ CSV...")
+    # 1. LOAD DATA
+    print("📂 Reading CSV data...")
+    # Ensure these paths exist in your container
     df_ratings = spark.read.csv(os.path.join(RAW_PATH, "ratings.csv"), header=True, inferSchema=True)
     df_movies = spark.read.csv(os.path.join(RAW_PATH, "movies.csv"), header=True, inferSchema=True)
 
-    # 3. Lọc Dữ liệu chung (Global Filtering)
-    # Loại bỏ dữ liệu "rác" (Sparse data) giúp cả 3 model chạy nhanh và chính xác hơn
-    print(f"🧹 Đang lọc dữ liệu (Min User Rate: {MIN_USER_RATINGS}, Min Movie Rate: {MIN_MOVIE_RATINGS})...")
+    clean_title_udf = F.udf(clean_title_logic, StringType())
+    df_movies = df_movies.withColumn("title", clean_title_udf(F.col("title")))
     
-    # Đếm số rating của user và movie
+    # 2. FILTERING
+    print(f"🧹 Filtering data...")
     user_counts = df_ratings.groupBy("userId").count().withColumnRenamed("count", "user_count")
     movie_counts = df_ratings.groupBy("movieId").count().withColumnRenamed("count", "movie_count")
     
-    # Lọc
     df_clean = df_ratings \
         .join(user_counts, "userId", "inner").filter(F.col("user_count") >= MIN_USER_RATINGS) \
         .join(movie_counts, "movieId", "inner").filter(F.col("movie_count") >= MIN_MOVIE_RATINGS) \
-        .select("userId", "movieId", "rating", "timestamp") # Chỉ giữ lại cột cần thiết
+        .select("userId", "movieId", "rating", "timestamp")
 
-    # Cache lại vào RAM vì biến này sẽ dùng cho cả 3 nhánh
+    # CACHE HERE for Model 1 & 2
     df_clean.cache()
-    print(f"✅ Dữ liệu sạch còn lại: {df_clean.count()} dòng rating.")
+    print(f"✅ Cleaned data count: {df_clean.count()} rows.")
 
-    # ==========================================
-    # NHÁNH 1: XỬ LÝ CHO MODEL ASSOCIATION RULES
-    # ==========================================
-    print("\n🛠  Đang xử lý dữ liệu cho Model 1 (Association Rules)...")
-    # Logic: Chỉ lấy phim User thích -> Gom thành list tên phim
+    # --- MODEL 1: ASSOCIATION RULES ---
+    print("\n🛠  Model 1 (Rules)...")
+    df_rules = df_clean.filter(F.col("rating") >= MIN_RATING_FOR_RULES).join(df_movies, "movieId", "inner")
     
-    # Lấy rating cao và join với tên phim
-    df_rules = df_clean.filter(F.col("rating") >= MIN_RATING_FOR_RULES) \
-        .join(df_movies, "movieId", "inner")
-    
-    # Gom nhóm: User | [Phim A, Phim B, Phim C]
-    df_transactions = df_rules.groupBy("userId") \
-        .agg(F.collect_list("title").alias("items"))
-    
-    # Lưu
-    path_m1 = os.path.join(OUTPUT_PATH, "model1_rules")
-    df_transactions.write.mode("overwrite").parquet(path_m1)
-    print(f"✅ Đã lưu dữ liệu Model 1 tại: {path_m1}")
+    df_transactions = df_rules.groupBy("userId").agg(F.collect_list("title").alias("items"))
+    df_transactions.write.mode("overwrite").parquet(os.path.join(OUTPUT_PATH, "model1_rules"))
+    print(f"✅ Model 1 Saved.")
 
-    # ==========================================
-    # NHÁNH 2: XỬ LÝ CHO MODEL SPARK ALS
-    # ==========================================
-    print("\n🛠  Đang xử lý dữ liệu cho Model 2 (Spark ALS)...")
-    # Logic: Giữ nguyên dạng số (userId, movieId, rating). Spark ALS tự xử lý được ID rời rạc.
-    
-    path_m2 = os.path.join(OUTPUT_PATH, "model2_als")
-    df_clean.select("userId", "movieId", "rating").write.mode("overwrite").parquet(path_m2)
-    print(f"✅ Đã lưu dữ liệu Model 2 tại: {path_m2}")
+    # --- MODEL 2: ALS ---
+    print("\n🛠  Model 2 (ALS)...")
+    # Save this data to disk. We will read it back for Model 3.
+    model2_path = os.path.join(OUTPUT_PATH, "model2_als")
+    df_clean.select("userId", "movieId", "rating").write.mode("overwrite").parquet(model2_path)
+    print(f"✅ Model 2 Saved.")
 
-    # ==========================================
-    # NHÁNH 3: XỬ LÝ CHO MODEL NEURAL CF
-    # ==========================================
-    print("\n🛠  Đang xử lý dữ liệu cho Model 3 (Deep Learning)...")
-    # Logic: Deep Learning cần index liên tục từ 0 -> N. 
-    # userId gốc: 1, 50, 100 -> userId mới: 0, 1, 2
+    # =========================================================
+    # CRITICAL FIX: FREE MEMORY BEFORE MODEL 3
+    # =========================================================
+    print("\n🧹 Unpersisting cache to free RAM for StringIndexer...")
+    df_clean.unpersist()        # Release the dataframe from memory
+    spark.catalog.clearCache()  # Clear all other caches
+    gc.collect()                # Force Python to clean up garbage
+    # =========================================================
+
+    # --- MODEL 3: DEEP LEARNING (INDEXING) ---
+    print("\n🛠  Model 3 (Deep Learning / StringIndexer)...")
     
-    # Indexing User
-    user_indexer = StringIndexer(inputCol="userId", outputCol="userIndex")
-    user_indexer_model = user_indexer.fit(df_clean)
-    df_indexed = user_indexer_model.transform(df_clean)
+    # Read back from the Parquet file we just saved (Much more memory efficient than cached CSV)
+    print("   -> Reloading data from Parquet (Disk)...")
+    df_for_ncf = spark.read.parquet(model2_path)
+
+    print("   -> Indexing UserId...")
+    # setHandleInvalid("skip") prevents crashes on unseen/null labels
+    user_indexer = StringIndexer(inputCol="userId", outputCol="userIndex").setHandleInvalid("skip")
+    user_indexer_model = user_indexer.fit(df_for_ncf)
+    df_indexed = user_indexer_model.transform(df_for_ncf)
     
-    # Indexing Movie
-    movie_indexer = StringIndexer(inputCol="movieId", outputCol="movieIndex")
+    print("   -> Indexing MovieId...")
+    movie_indexer = StringIndexer(inputCol="movieId", outputCol="movieIndex").setHandleInvalid("skip")
     movie_indexer_model = movie_indexer.fit(df_indexed)
     df_final_ncf = movie_indexer_model.transform(df_indexed)
     
-    # Lưu data đã index (Cast về integer cho nhẹ)
-    df_final_ncf = df_final_ncf.select(
+    # Save Indexed Data
+    df_final_ncf.select(
         F.col("userIndex").cast("integer"), 
         F.col("movieIndex").cast("integer"), 
         F.col("rating")
-    )
+    ).write.mode("overwrite").parquet(os.path.join(OUTPUT_PATH, "model3_ncf"))
     
-    path_m3 = os.path.join(OUTPUT_PATH, "model3_ncf")
-    df_final_ncf.write.mode("overwrite").parquet(path_m3)
+    # Save Mappings (FIXED LOGIC to ensure Index ID matches Row ID)
+    print("   -> Saving Mappings...")
     
-    # QUAN TRỌNG: Lưu lại map để sau này tra ngược (Index 0 là phim gì?)
-    # Lưu danh sách user gốc (index tương ứng là vị trí trong mảng)
-    print("   -> Đang lưu mapping User/Item...")
-    spark.createDataFrame([(i, ) for i in user_indexer_model.labels], ["original_userId"]) \
+    # Create tuples of (index, label) explicitly using enumerate
+    user_labels = [(idx, label) for idx, label in enumerate(user_indexer_model.labels)]
+    spark.createDataFrame(user_labels, ["userIndex", "original_userId"]) \
         .write.mode("overwrite").parquet(os.path.join(OUTPUT_PATH, "model3_ncf_user_mapping"))
         
-    spark.createDataFrame([(i, ) for i in movie_indexer_model.labels], ["original_movieId"]) \
+    movie_labels = [(idx, label) for idx, label in enumerate(movie_indexer_model.labels)]
+    spark.createDataFrame(movie_labels, ["movieIndex", "original_movieId"]) \
         .write.mode("overwrite").parquet(os.path.join(OUTPUT_PATH, "model3_ncf_movie_mapping"))
 
-    print(f"✅ Đã lưu dữ liệu Model 3 tại: {path_m3}")
-
+    print(f"✅ Model 3 Saved.")
     spark.stop()
-    print("\n🎉 XỬ LÝ HOÀN TẤT! Sẵn sàng để train.")
+    print("\n🎉 PROCESS COMPLETED SUCCESSFULLY!")
 
 if __name__ == "__main__":
     main()
