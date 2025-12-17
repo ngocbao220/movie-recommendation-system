@@ -5,7 +5,7 @@ from pyspark.ml.evaluation import RegressionEvaluator
 
 # --- CẤU HÌNH ---
 INPUT_PATH = "data/processed/model2_als"
-OUTPUT_PATH = "models/model_2_als/artifacts/als_model"
+OUTPUT_PATH = "outputs/model_2_als"
 
 def main():
     print("🚀 Đang khởi động Spark cho Model 2 (ALS)...")
