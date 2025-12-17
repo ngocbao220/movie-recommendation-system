@@ -1,14 +1,17 @@
-version: '3.8'
-
 services:
-  # 1. PROCESS-DATA: Chạy 1 lần rồi tắt (Ephemeral Container)
+  # 1. Pre-PROCESS: Chạy 1 lần rồi tắt (Ephemeral Container)
   preprocess-data:
-    container_name: preprocess-data
+    container_name: preprocess
     build: .
     volumes:
       - ./:/app
     # Chỉ chạy script xử lý data rồi tự thoát
-    command: python src/process_data.py
+    command: >
+      bash -c "
+      echo '⏳ Đang xử lý dữ liệu...' &&
+      python src/data/preprocess.py &&
+      echo '✅ Processing hoàn tất!'
+      "
     # Restart: no -> Để docker không cố khởi động lại nó sau khi nó đã làm xong việc
     restart: "no"
 
@@ -20,13 +23,14 @@ services:
       - ./:/app
     command: >
       bash -c "
-      # echo '⏳ Đang train Model Rules...' &&
-      # python models/model_1_rules/train.py &&
-      echo '⏳ Đang train Model ALS...' &&
+      echo '⏳ Train Model ALS...' &&
       python models/model_2_als/train.py &&
-      echo '✅ Training hoàn tất!
+      echo '✅ ALS xong!'
       "
-    # QUAN TRỌNG: Đợi preprocess-data chạy XONG mới bắt đầu training được
+      
+# echo '⏳ Train Model Rules...' &&
+# python models/model_1_rules/train.py &&
+# echo '✅ Rules xong!'
     depends_on:
       preprocess-data:
         condition: service_completed_successfully
@@ -42,4 +46,5 @@ services:
     # Streamlit sẽ tự động reload khi file model thay đổi, nên cứ chạy song song
     command: streamlit run src/ui/main.py --server.port=8501 --server.address=0.0.0.0
     depends_on:
-      - models-training # Đợi models-training chạy (để đảm bảo môi trường ổn định)
+      models-training:
+        condition: service_completed_successfully

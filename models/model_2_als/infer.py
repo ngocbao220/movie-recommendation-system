@@ -4,7 +4,7 @@ from pyspark.ml.recommendation import ALSModel
 from pyspark.sql.functions import col
 
 # --- CẤU HÌNH ---
-MODEL_PATH = "models/model_2_als/artifacts/als_model"
+MODEL_PATH = "outputs/model_2_als"
 MOVIES_CSV = "data/raw/movies.csv"
 RATINGS_CSV = "data/raw/ratings.csv"
 
