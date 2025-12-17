@@ -4,8 +4,21 @@ from fastapi import FastAPI, HTTPException
 import pandas as pd
 import requests
 
-df_map = pd.read_csv("../data/movie_mapping.csv")
+import os
+import pandas as pd
+
+# Thư mục chứa api.py → src/ui
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+# Lùi 2 cấp: ui → src → project root
+PROJECT_ROOT = os.path.abspath(os.path.join(BASE_DIR, "..", ".."))
+
+# data/ nằm ở project root
+DATA_PATH = os.path.join(PROJECT_ROOT, "data", "movies.csv")
+
+df_map = pd.read_csv(DATA_PATH)
 df_map["tmdbId"] = df_map["tmdbId"].astype(int)
+
 
 movieId_to_tmdb = dict(
     zip(df_map["movieId"], df_map["tmdbId"])
@@ -21,7 +34,8 @@ def tmdb_get_movie(tmdb_id):
             "api_key": TMDB_API_KEY,
             "language": "vi-VN",
             "append_to_response": "images"
-        }
+        },
+        timeout=15
     )
     return res.json()
 
@@ -31,7 +45,8 @@ def tmdb_get_trailer_key(tmdb_id):
         params={
             "api_key": TMDB_API_KEY,
             "language": "en-US"
-        }
+        },
+        timeout=15
     )
 
     data = res.json().get("results", [])
@@ -111,3 +126,8 @@ def movie_detail(movieId: int):
         "movie": movie_detail,
         "recommendations": recommendations
     }
+
+
+# tmdb_id = 862
+# print(tmdb_get_movie(tmdb_id))
+# print(tmdb_get_trailer_key(tmdb_id))

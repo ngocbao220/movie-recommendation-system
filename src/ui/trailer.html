@@ -1,8 +1,90 @@
-<iframe 
+<!-- <iframe 
   width="800" 
   height="450" 
   src="https://www.youtube.com/embed/CxwTLktovTU?autoplay=1&controls=1&modestbranding=1&rel=0" 
   frameborder="0" 
   allow="autoplay; encrypted-media" 
   allowfullscreen>
-</iframe>
+</iframe> -->
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <title>Movie Detail Test</title>
+  <style>
+    body {
+      font-family: Arial;
+      padding: 20px;
+    }
+    img {
+      max-width: 200px;
+      margin-right: 10px;
+    }
+    .rec {
+      display: inline-block;
+      margin: 10px;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+
+  <h2>Nhập movieId</h2>
+  <input id="movieIdInput" type="number" placeholder="VD: 1" />
+  <button onclick="loadMovie()">Xem phim</button>
+
+  <hr />
+
+  <div id="result"></div>
+
+  <script>
+    async function loadMovie() {
+      const movieId = document.getElementById("movieIdInput").value;
+      if (!movieId) return;
+
+      const res = await fetch(`http://127.0.0.1:8000/api/movie/${movieId}`);
+      const data = await res.json();
+
+      const movie = data.movie;
+      const recs = data.recommendations;
+
+      let html = `
+        <h2>${movie.title}</h2>
+        <img src="${movie.poster}" />
+        <p><b>Ngày phát hành:</b> ${movie.release_date}</p>
+        <p><b>Điểm:</b> ${movie.vote_average} (${movie.vote_count} votes)</p>
+        <p><b>Thể loại:</b> ${movie.genres.join(", ")}</p>
+        <p>${movie.overview}</p>
+      `;
+
+      if (movie_trailer = movie.trailer_key) {
+        html += `
+          <h3>Trailer</h3>
+          <iframe
+            width="800"
+            height="450"
+            src="https://www.youtube.com/embed/${movie_trailer}?controls=1&rel=0"
+            frameborder="0"
+            allowfullscreen>
+          </iframe>
+        `;
+      }
+
+      html += `<h3>Phim đề xuất</h3>`;
+
+      recs.forEach(r => {
+        html += `
+          <div class="rec">
+            <img src="${r.poster}" />
+            <p>${r.title}</p>
+            <small>⭐ ${r.vote_average}</small>
+          </div>
+        `;
+      });
+
+      document.getElementById("result").innerHTML = html;
+    }
+  </script>
+
+</body>
+</html>
