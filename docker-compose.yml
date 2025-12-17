@@ -2,50 +2,44 @@ version: '3.8'
 
 services:
   # 1. PROCESS-DATA: Chạy 1 lần rồi tắt (Ephemeral Container)
-  process-data:
-    container_name: movie-process
+  preprocess-data:
+    container_name: preprocess-data
     build: .
     volumes:
-      - ./:/home/jovyan/work  # Map đúng đường dẫn của user jovyan
+      - ./:/app
     # Chỉ chạy script xử lý data rồi tự thoát
     command: python src/process_data.py
     # Restart: no -> Để docker không cố khởi động lại nó sau khi nó đã làm xong việc
     restart: "no"
 
-  # 2. LAB: Training & Notebook
-  lab:
-    container_name: movie-lab
+  # 2. Training
+  models-training:
+    container_name: models-training
     build: .
-    ports:
-      - "8888:8888" # Jupyter
-      - "4040:4040" # Spark UI
     volumes:
-      - ./:/home/jovyan/work
-    environment:
-      - JUPYTER_ENABLE_LAB=yes
-      - JUPYTER_TOKEN=team123
-    # Logic: Train xong Model 1 & 2 rồi mới bật Notebook lên để team làm việc
+      - ./:/app
     command: >
       bash -c "
-      # echo '⏳ Đang train Model 1...' && python models/model_1_rules/train.py &&
-      echo '⏳ Đang train Model 2...' && python models/model_2_als/train.py &&
-      echo '✅ Training hoàn tất! Đang khởi động Jupyter...' &&
-      start-notebook.sh --NotebookApp.token='team123'
+      # echo '⏳ Đang train Model Rules...' &&
+      # python models/model_1_rules/train.py &&
+      echo '⏳ Đang train Model ALS...' &&
+      python models/model_2_als/train.py &&
+      echo '✅ Training hoàn tất!
       "
-    # QUAN TRỌNG: Đợi process-data chạy XONG mới bắt đầu
+    # QUAN TRỌNG: Đợi preprocess-data chạy XONG mới bắt đầu training được
     depends_on:
-      process-data:
+      preprocess-data:
         condition: service_completed_successfully
 
   # 3. APP: Web Giao diện
   app:
-    container_name: movie-app
+    container_name: web-app
     build: .
     ports:
       - "8501:8501"
     volumes:
-      - ./:/home/jovyan/work
+      - ./:/app
     # Streamlit sẽ tự động reload khi file model thay đổi, nên cứ chạy song song
-    command: streamlit run src/app.py --server.port=8501 --server.address=0.0.0.0
+    command: streamlit run src/ui/main.py --server.port=8501 --server.address=0.0.0.0
     depends_on:
-      - lab # Đợi lab chạy (để đảm bảo môi trường ổn định)
+      - models-training # Đợi models-training chạy (để đảm bảo môi trường ổn định)
