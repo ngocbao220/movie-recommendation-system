@@ -1,13 +1,4 @@
-# Cho Model 1 (Spark)
 pyspark==3.5.0
-
-# Cho Model 2 (Deep Learning)
-torch
-torchvision
-scikit-learn
-
-# Cho Model 3 (Rules)
-mlxtend
 pandas
 numpy
 
