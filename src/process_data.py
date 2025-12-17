@@ -4,7 +4,7 @@ from pyspark.sql import functions as F
 from pyspark.ml.feature import StringIndexer
 
 # --- CẤU HÌNH ---
-RAW_PATH = "data/raw"
+RAW_PATH = "..data"
 OUTPUT_PATH = "data/processed"
 
 # Ngưỡng lọc dữ liệu (Để giảm nhiễu và tăng tốc độ train)
@@ -25,6 +25,8 @@ def main():
     print("📂 Đang đọc dữ liệu từ CSV...")
     df_ratings = spark.read.csv(os.path.join(RAW_PATH, "ratings.csv"), header=True, inferSchema=True)
     df_movies = spark.read.csv(os.path.join(RAW_PATH, "movies.csv"), header=True, inferSchema=True)
+    df_links = spark.read.csv(os.path.join(RAW_PATH, "links.csv"),header=True,inferSchema=True)
+
 
     # 3. Lọc Dữ liệu chung (Global Filtering)
     # Loại bỏ dữ liệu "rác" (Sparse data) giúp cả 3 model chạy nhanh và chính xác hơn
