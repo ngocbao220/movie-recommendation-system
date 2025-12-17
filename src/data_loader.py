@@ -1,3 +1,5 @@
+# tạo metadata.parquet từ movies.csv và tags.csv 
+# phục vụ cho hệ thống gợi ý lai (Hybrid Recommender System)
 import os
 import shutil
 from pyspark.sql import SparkSession
