@@ -1,11 +1,12 @@
 from fastapi import FastAPI, HTTPException
-
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
+from fastapi.middleware.cors import CORSMiddleware
 
 import pandas as pd
-import requests
-
 import os
-import pandas as pd
+import httpx
+import asyncio
 
 # Thư mục chứa api.py → src/ui
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -18,53 +19,67 @@ DATA_PATH = os.path.join(PROJECT_ROOT, "data", "movies.csv")
 
 df_map = pd.read_csv(DATA_PATH)
 df_map["tmdbId"] = df_map["tmdbId"].astype(int)
-
-
-movieId_to_tmdb = dict(
-    zip(df_map["movieId"], df_map["tmdbId"])
-)
+movieId_to_tmdb = dict(zip(df_map["movieId"], df_map["tmdbId"]))
 
 TMDB_API_KEY = "ff48b02cdcd1f6e40df93cb3ff292031"
 BASE_URL = "https://api.themoviedb.org/3"
 
-def tmdb_get_movie(tmdb_id):
-    res = requests.get(
+# FastAPI app
+app = FastAPI()
+
+# CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Mount static
+app.mount("/static", StaticFiles(directory=BASE_DIR), name="static")
+
+@app.get("/")
+def index():
+    return FileResponse(os.path.join(BASE_DIR, "test.html"))
+
+# ---------------- Async TMDB requests ---------------- #
+
+async def tmdb_get_movie(client: httpx.AsyncClient, tmdb_id: int):
+    res = await client.get(
         f"{BASE_URL}/movie/{tmdb_id}",
         params={
             "api_key": TMDB_API_KEY,
             "language": "vi-VN",
             "append_to_response": "images"
         },
-        timeout=15
+        timeout=15.0
     )
     return res.json()
 
-def tmdb_get_trailer_key(tmdb_id):
-    res = requests.get(
+async def tmdb_get_trailer_key(client: httpx.AsyncClient, tmdb_id: int):
+    res = await client.get(
         f"{BASE_URL}/movie/{tmdb_id}/videos",
         params={
             "api_key": TMDB_API_KEY,
             "language": "en-US"
         },
-        timeout=15
+        timeout=15.0
     )
-
     data = res.json().get("results", [])
 
-    # Ưu tiên Trailer trên YouTube
     for v in data:
         if v["site"] == "YouTube" and v["type"] == "Trailer":
             return v["key"]
-
-    # Fallback: teaser
     for v in data:
         if v["site"] == "YouTube":
             return v["key"]
-
     return None
 
+async def parse_movie_detail(client: httpx.AsyncClient, tmdb_id: int):
+    m = await tmdb_get_movie(client, tmdb_id)
+    trailer_key = await tmdb_get_trailer_key(client, tmdb_id)
 
-def parse_movie_detail(m):
     return {
         "title": m.get("title"),
         "original_title": m.get("original_title"),
@@ -72,6 +87,7 @@ def parse_movie_detail(m):
         "vote_average": m.get("vote_average"),
         "vote_count": m.get("vote_count"),
         "genres": [g["name"] for g in m.get("genres", [])],
+        "trailer_key": trailer_key,
         "overview": m.get("overview"),
         "poster": f"https://image.tmdb.org/t/p/w500{m['poster_path']}" if m.get("poster_path") else None,
         "backdrop": f"https://image.tmdb.org/t/p/w1280{m['backdrop_path']}" if m.get("backdrop_path") else None,
@@ -81,52 +97,58 @@ def parse_movie_detail(m):
         )
     }
 
+# ---------------- Recommendation ---------------- #
+
 def recommend(movie_id, k=10):
+    # Demo tạm
     return [2, 34, 56, 78]
 
-
-app = FastAPI()
+# ---------------- API endpoint ---------------- #
 
 @app.get("/api/movie/{movieId}")
-def movie_detail(movieId: int):
-
-    # 1. movieId → tmdbId
+async def movie_detail(movieId: int):
     if movieId not in movieId_to_tmdb:
         raise HTTPException(404, "Movie not found")
 
     tmdb_id = movieId_to_tmdb[movieId]
 
-    # 2. TMDB detail
-    movie_raw = tmdb_get_movie(tmdb_id)
-    movie_trailer_key = tmdb_get_trailer_key(tmdb_id)
-    movie_detail = parse_movie_detail(movie_raw)
-
-    # 3. Model recommend
     rec_movie_ids = recommend(movieId)
+    rec_tmdb_ids = [movieId_to_tmdb[mid] for mid in rec_movie_ids if mid in movieId_to_tmdb]
 
-    # 4. Lấy info cho phim đề xuất
-    recommendations = []
-    for mid in rec_movie_ids:
-        if mid not in movieId_to_tmdb:
-            continue
+    async with httpx.AsyncClient() as client:
+        # Song song lấy phim chính + trailer + phim đề xuất
+        tasks = [parse_movie_detail(client, tmdb_id)]  # phim chính
+        tasks += [parse_movie_detail(client, r_id) for r_id in rec_tmdb_ids]  # phim đề xuất
 
-        tmdb_rec = movieId_to_tmdb[mid]
-        m = tmdb_get_movie(tmdb_rec)
+        results = await asyncio.gather(*tasks)
 
-        recommendations.append({
-            "movieId": mid,
-            "title": m.get("title"),
-            "poster": f"https://image.tmdb.org/t/p/w300{m['poster_path']}" if m.get("poster_path") else None,
-            "vote_average": m.get("vote_average"),
-            "vote_count": m.get("vote_count")
-        })
+    movie_detail_result = results[0]
+    recommendations_result = results[1:]
 
-    # 5. Trả về frontend
+    # Trả về frontend
     return {
-        "movie": movie_detail,
-        "recommendations": recommendations
+        "movie": movie_detail_result,
+        "recommendations": [
+            {
+                "movieId": mid,
+                "title": r["title"],
+                "poster": r["poster"],
+                "vote_average": r["vote_average"],
+                "vote_count": r["vote_count"]
+            }
+            for mid, r in zip(rec_movie_ids, recommendations_result)
+        ]
     }
 
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+# Mount thư mục ui để truy cập test.html
+app.mount("/static", StaticFiles(directory=BASE_DIR), name="static")
+
+@app.get("/")
+def index():
+    return FileResponse(os.path.join(BASE_DIR, "test.html"))
 
 # tmdb_id = 862
 # print(tmdb_get_movie(tmdb_id))
