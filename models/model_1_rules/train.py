@@ -1,103 +1,108 @@
 import sys
 import os
 import time
+import shutil
+import gc
 from pyspark.sql import SparkSession
 from pyspark.ml.fpm import FPGrowth
 from pyspark.sql import functions as F
 
 # --- CẤU HÌNH ---
 INPUT_PATH = "data/processed/model1_rules"
-OUTPUT_PATH = "checkpoints/model_1_rules/rules.parquet"
+OUTPUT_PATH = "checkpoints/model_1_rulesv2/rules.parquet"
+TEMP_DIR = os.path.join(os.getcwd(), "spark_temp_data") 
 
-# --- THIẾT LẬP HỢP LÝ ---
-# Khi đã cắt ngắn dữ liệu, ta có thể hạ Support xuống mức hợp lý hơn
-MIN_SUPPORT = 0.03      # 3% (Thay vì 0.1)
-MIN_CONFIDENCE = 0.3    # 30%
+# --- CẤU HÌNH AN TOÀN TUYỆT ĐỐI (SURVIVAL MODE) ---
+# 1. Tăng Support lên 3% (Mất một số phim ngách, nhưng đảm bảo chạy xong)
+MIN_SUPPORT = 0.03      
+# 2. Confidence 40% (Giữ luật chất lượng)
+MIN_CONFIDENCE = 0.4    
+# 3. Lift 1.5 (Chặn phim rác)
+MIN_LIFT = 1.5           
 
-# GIỚI HẠN DỮ LIỆU ĐỂ CHỐNG OOM
-MAX_ITEMS_PER_USER = 50   # Chỉ lấy 50 phim/user
-USER_SAMPLE_FRACTION = 0.5 # Chỉ lấy 50% số lượng user
+# 4. Giảm số lượng phim tính toán xuống 30 (Rất quan trọng để giảm tổ hợp)
+MAX_ITEMS_PER_USER = 30   
+# 5. Chỉ dùng 50% dữ liệu để train (Nếu chạy thành công mới tăng lên)
+USER_SAMPLE_FRACTION = 0.5 
 
 def main():
-    print("🚀 Đang khởi động Spark (Optimized Mode)...")
+    # Dọn dẹp temp cũ
+    if os.path.exists(TEMP_DIR): shutil.rmtree(TEMP_DIR)
+    os.makedirs(TEMP_DIR)
+
+    print(f"🚀 Khởi động Spark (Survival Mode - 8GB)...")
+    
     spark = SparkSession.builder \
-        .appName("Train_Model_1_Rules") \
-        .config("spark.driver.memory", "4g") \
-        .config("spark.executor.memory", "4g") \
-        .config("spark.sql.shuffle.partitions", "100") \
+        .appName("Train_Rules_Survival") \
+        .config("spark.driver.memory", "6g") \
+        .config("spark.executor.memory", "6g") \
+        .config("spark.sql.shuffle.partitions", "200") \
         .config("spark.driver.maxResultSize", "2g") \
-        .config("spark.memory.offHeap.enabled", "true") \
-        .config("spark.memory.offHeap.size", "1g") \
+        .config("spark.memory.fraction", "0.6") \
+        .config("spark.memory.storageFraction", "0.2") \
+        .config("spark.local.dir", TEMP_DIR) \
         .getOrCreate()
     
     spark.sparkContext.setLogLevel("WARN")
+    spark.sparkContext.setCheckpointDir(os.path.join(TEMP_DIR, "checkpoints"))
 
-    # 1. Đọc dữ liệu
-    print(f"📂 Đang đọc dữ liệu từ {INPUT_PATH}...")
-    if not os.path.exists(INPUT_PATH):
-        print("❌ Lỗi: Không tìm thấy data.")
-        return
+    print(f"📂 Đang đọc dữ liệu...")
+    if not os.path.exists(INPUT_PATH): return
 
     df = spark.read.parquet(INPUT_PATH)
-    total_users = df.count()
-    print(f"📊 Tổng user ban đầu: {total_users}")
     
-    # 2. XỬ LÝ DỮ LIỆU (CHÌA KHÓA CHỐNG CRASH)
-    print("✂️ Đang tối ưu hóa dữ liệu...")
+    print(f"✂️ Đang xử lý dữ liệu (Sample={USER_SAMPLE_FRACTION}, MaxItems={MAX_ITEMS_PER_USER})...")
     
-    # Bước A: Lấy mẫu ngẫu nhiên (Sampling)
-    df_sampled = df.sample(withReplacement=False, fraction=USER_SAMPLE_FRACTION, seed=42)
+    # 1. Lấy mẫu
+    df = df.sample(withReplacement=False, fraction=USER_SAMPLE_FRACTION, seed=42)
     
-    # Bước B: Cắt ngắn Transaction (Slicing) & Xóa trùng lặp
-    # slice(col, start, length): Lấy từ phần tử số 1, lấy tối đa 50 phần tử
-    df_clean = df_sampled.withColumn("items_distinct", F.array_distinct(F.col("items"))) \
-                         .withColumn("items_sliced", F.slice(F.col("items_distinct"), 1, MAX_ITEMS_PER_USER)) \
-                         .select(F.col("items_sliced").alias("items"))
+    # 2. Slicing & Deduplicate
+    df_clean = df.withColumn("items_distinct", F.array_distinct(F.col("items"))) \
+                 .withColumn("items_sliced", F.slice(F.col("items_distinct"), 1, MAX_ITEMS_PER_USER)) \
+                 .select(F.col("items_sliced").alias("items"))
     
-    # Cache lại dữ liệu sạch
-    df_clean.cache()
-    clean_count = df_clean.count()
-    print(f"✅ Dữ liệu sau khi xử lý: {clean_count} users (Max {MAX_ITEMS_PER_USER} items/user).")
+    # 3. Repartition (Chia nhỏ dữ liệu ra 200 gói để Executor không bị nghẹn)
+    df_clean = df_clean.repartition(200)
+    
+    # 4. Checkpoint (Cắt đứt RAM cũ)
+    df_clean = df_clean.checkpoint()
+    
+    count = df_clean.count()
+    print(f"✅ Sẵn sàng train: {count} users.")
 
-    # 3. TRAIN
-    print(f"🛠  Bắt đầu Train FPGrowth (Support: {MIN_SUPPORT}, Conf: {MIN_CONFIDENCE})...")
+    print(f"🛠  Train FPGrowth (Supp={MIN_SUPPORT})...")
     start_time = time.time()
     
     fp = FPGrowth(itemsCol="items", 
                   minSupport=MIN_SUPPORT, 
                   minConfidence=MIN_CONFIDENCE)
     
-    model = fp.fit(df_clean)
-    print(f"⏱  Train xong trong {round(time.time() - start_time, 2)} giây.")
-
-    # 4. LƯU KẾT QUẢ
-    print("💾 Đang sinh luật và lưu...")
     try:
+        model = fp.fit(df_clean)
+        print(f"⏱  Train xong trong {round(time.time() - start_time, 2)} giây.")
+
+        print("💾 Đang lọc và lưu kết quả...")
         rules = model.associationRules
         
-        # --- TỐI ƯU BỘ NHỚ KHI LƯU ---
-        # Chỉ giữ lại các luật ngắn (Antecedent <= 2)
-        # Luật dài (VD: Xem A,B,C,D -> E) rất tốn bộ nhớ và ít có giá trị gợi ý thực tế
-        print("   -> Lọc bỏ các luật quá dài (Antecedent > 2)...")
-        rules_filtered = rules.filter(F.size(F.col("antecedent")) <= 2)
+        # Lọc luật ngay trên luồng xử lý
+        rules = rules.filter(F.size(F.col("antecedent")) <= 2)
+        rules = rules.filter(F.col("lift") >= MIN_LIFT)
         
-        # Lưu ra Parquet
-        rules_filtered.write.mode("overwrite").parquet(OUTPUT_PATH)
-        print("✅ Lưu thành công!")
+        # Chia nhỏ file đầu ra
+        rules = rules.repartition(5)
         
-        # 5. KIỂM TRA
-        print("📊 Kiểm tra kết quả...")
-        saved_rules = spark.read.parquet(OUTPUT_PATH)
-        count_rules = saved_rules.count()
-        print(f"🎉 Tổng số luật tìm thấy: {count_rules}")
+        rules.write.mode("overwrite").parquet(OUTPUT_PATH)
+        print(f"✅ LƯU THÀNH CÔNG! (Support={MIN_SUPPORT})")
         
-        if count_rules > 0:
-            saved_rules.sort(F.col("lift").desc()).show(5, truncate=False)
-            
+        # Kiểm tra nhanh
+        saved = spark.read.parquet(OUTPUT_PATH)
+        print(f"🎉 Số luật tìm được: {saved.count()}")
+        
+        # Dọn dẹp
+        if os.path.exists(TEMP_DIR): shutil.rmtree(TEMP_DIR)
+
     except Exception as e:
-        print(f"❌ Lỗi khi lưu: {e}")
-        import traceback
-        traceback.print_exc()
+        print(f"❌ LỖI: {e}")
 
     spark.stop()
 
