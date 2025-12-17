@@ -1,3 +1,3 @@
-docker exec -it movie-lab bash
+docker exec -it models-training bash
 
 python models/model_2_als/train.py
