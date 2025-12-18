@@ -1,6 +1,9 @@
 /data
 /venv
 /checkpoints
+/model_1_rulesv2
+/model_1_rulesv3
+model_2_als 
 __pycache__/
 *.py[cod]
 *$py.class
