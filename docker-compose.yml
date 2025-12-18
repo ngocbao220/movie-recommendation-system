@@ -1,7 +1,7 @@
 services:
-  # 1. Pre-PROCESS: Chạy 1 lần rồi tắt (Ephemeral Container)
+  # 1. Pre-processing Data
   preprocess-data:
-    container_name: preprocess
+    container_name: preprocess-data
     build: .
     volumes:
       - ./:/app
@@ -12,10 +12,8 @@ services:
       python src/data/preprocess.py &&
       echo '✅ Processing hoàn tất!'
       "
-    # Restart: no -> Để docker không cố khởi động lại nó sau khi nó đã làm xong việc
-    restart: "no"
 
-  # 2. Training
+  # 2. Training Models
   models-training:
     container_name: models-training
     build: .
@@ -34,45 +32,23 @@ services:
     depends_on:
       preprocess-data:
         condition: service_completed_successfully
-      
-# echo '⏳ Train Model Rules...' &&
-# python models/model_1_rules/train.py &&
-# echo '✅ Rules xong!'
-    
 
   # 4. APP: Web API
   api:
     container_name: web-api
-    build: .
-  # Backend: FastAPI serving ML models
-  backend:
-    container_name: movie-backend
     build:
       context: .
-      dockerfile: Dockerfile.backend
     ports:
-      - "8001:8001"
+      - "8000:8000"
     volumes:
-      - ./src:/app/src
-      - ./models:/app/models
-      - ./data:/app/data
-      - ./checkpoints:/app/checkpoints
-      - ./setting:/app/setting
+      - ./:/app
     environment:
       - PYTHONUNBUFFERED=1
-      - TMDB_API_KEY=ff48b02cdcd1f6e40df93cb3ff292031
-    command: python src/ui/api.py
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8001/api/movies/popular"]
-      interval: 10s
-      timeout: 5s
-      retries: 3
-    networks:
-      - movie-network
+    command: python src/api/main.py
 
   # Frontend: React + Vite
   frontend:
-    container_name: movie-frontend
+    container_name: frontend
     build:
       context: ./frontend
       dockerfile: Dockerfile
@@ -84,8 +60,7 @@ services:
     environment:
       - VITE_API_URL=http://localhost:8001
     depends_on:
-      backend:
-        condition: service_healthy
+      - api
     networks:
       - movie-network
 

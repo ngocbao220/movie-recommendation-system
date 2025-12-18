@@ -30,20 +30,6 @@ class AssociationRecommender:
         if self.rules is None or self.rules.empty:
             return []
 
-<<<<<<< HEAD
-        # --- SỬA LỖI Ở ĐÂY ---
-        # Spark lưu tên cột là 'antecedent' (số ít), không phải 'antecedents'
-        col_ant = 'antecedent' if 'antecedent' in self.rules.columns else 'antecedents'
-        col_cons = 'consequent' if 'consequent' in self.rules.columns else 'consequents'
-        # ---------------------
-
-        # Tạo mask để lọc
-        def is_in_antecedents(antecedents_list):
-            return movie_name in list(antecedents_list)
-
-        # Lọc ra các luật phù hợp (Dùng tên cột động đã check ở trên)
-        matched_rules = self.rules[self.rules[col_ant].apply(is_in_antecedents)]
-=======
         # Parquet file có columns: 'antecedent', 'consequent' (không có 's')
         # antecedent và consequent là list của tên phim
         
@@ -53,27 +39,17 @@ class AssociationRecommender:
 
         # Lọc ra các luật phù hợp
         matched_rules = self.rules[self.rules['antecedent'].apply(is_in_antecedent)]
->>>>>>> origin/test
 
         if matched_rules.empty:
             return []
 
-<<<<<<< HEAD
-        # Sắp xếp kết quả theo 'lift'
-=======
         # Sắp xếp kết quả theo 'lift' (độ liên quan)
->>>>>>> origin/test
         matched_rules = matched_rules.sort_values(by='lift', ascending=False)
 
         results = []
         for _, row in matched_rules.head(top_k).iterrows():
-<<<<<<< HEAD
-            # Lấy kết quả từ cột consequent
-            recs = list(row[col_cons])
-=======
             # consequent cũng là 1 list, thường chỉ chứa 1 phim
             recs = list(row['consequent'])
->>>>>>> origin/test
             for rec_movie in recs:
                 if rec_movie != movie_name: 
                     results.append({

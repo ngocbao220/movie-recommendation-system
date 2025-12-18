@@ -1,19 +1,14 @@
-# Cho Model 1 (Spark)
-
-
-# Cho Model 2 (Deep Learning)
-
-# Cho Model 3 (Rules)
+# Cho Model Rules (Rules)
 mlxtend
+numpy==1.20.0
 pandas
-numpy
 
-# Cho Giao diện
+# Cho Model ALS (Spark)
+pyspark==3.5.0
+
+# Cho Giao diện 
 fastapi
 uvicorn[standard]
-pandas
 requests
 httpx
 asyncio
-
-streamlit
