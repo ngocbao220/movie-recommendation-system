@@ -1,0 +1,122 @@
+[
+  {
+    "movieId": 318,
+    "tmdbId": 278,
+    "count": 102929,
+    "avg_rating": 4.404613860039444
+  },
+  {
+    "movieId": 356,
+    "tmdbId": 13,
+    "count": 100296,
+    "avg_rating": 4.052743878120762
+  },
+  {
+    "movieId": 296,
+    "tmdbId": 680,
+    "count": 98409,
+    "avg_rating": 4.196968773181315
+  },
+  {
+    "movieId": 2571,
+    "tmdbId": 603,
+    "count": 93808,
+    "avg_rating": 4.156436551253624
+  },
+  {
+    "movieId": 593,
+    "tmdbId": 274,
+    "count": 90330,
+    "avg_rating": 4.148367098416916
+  },
+  {
+    "movieId": 260,
+    "tmdbId": 11,
+    "count": 85010,
+    "avg_rating": 4.099823550170568
+  },
+  {
+    "movieId": 2959,
+    "tmdbId": 550,
+    "count": 77332,
+    "avg_rating": 4.228779806548388
+  },
+  {
+    "movieId": 480,
+    "tmdbId": 329,
+    "count": 75233,
+    "avg_rating": 3.6986229447184082
+  },
+  {
+    "movieId": 527,
+    "tmdbId": 424,
+    "count": 73849,
+    "avg_rating": 4.23699034516378
+  },
+  {
+    "movieId": 4993,
+    "tmdbId": 120,
+    "count": 73122,
+    "avg_rating": 4.0921336943737865
+  },
+  {
+    "movieId": 1196,
+    "tmdbId": 1891,
+    "count": 72151,
+    "avg_rating": 4.13035162367812
+  },
+  {
+    "movieId": 110,
+    "tmdbId": 197,
+    "count": 69482,
+    "avg_rating": 3.9886301488155205
+  },
+  {
+    "movieId": 1,
+    "tmdbId": 862,
+    "count": 68997,
+    "avg_rating": 3.8974375697494095
+  },
+  {
+    "movieId": 589,
+    "tmdbId": 280,
+    "count": 68383,
+    "avg_rating": 3.96204466022257
+  },
+  {
+    "movieId": 50,
+    "tmdbId": 629,
+    "count": 67750,
+    "avg_rating": 4.265070110701107
+  },
+  {
+    "movieId": 1210,
+    "tmdbId": 1892,
+    "count": 67496,
+    "avg_rating": 3.991555055114377
+  },
+  {
+    "movieId": 5952,
+    "tmdbId": 121,
+    "count": 67463,
+    "avg_rating": 4.072187717711931
+  },
+  {
+    "movieId": 7153,
+    "tmdbId": 122,
+    "count": 67449,
+    "avg_rating": 4.094360183249567
+  },
+  {
+    "movieId": 1198,
+    "tmdbId": 85,
+    "count": 67408,
+    "avg_rating": 4.1118932470923335
+  },
+  {
+    "movieId": 858,
+    "tmdbId": 238,
+    "count": 66440,
+    "avg_rating": 4.317030403371463
+  }
+]

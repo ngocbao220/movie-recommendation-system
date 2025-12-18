@@ -1,6 +1,9 @@
-/data
 /venv
+data/processed
+data/results
 /checkpoints
+/models
+/scripts
 __pycache__/
 *.py[cod]
 *$py.class

@@ -11,8 +11,8 @@ TAGS_PATH = os.path.join(DATA_DIR, 'tags.csv')
 
 # =================== CẤU HÌNH CHO ĐƯỜNG DẪN ===================
 ALS_RESULT = os.path.join(BASE_DIR, "data/results/als_recommendations")
-RULES_RESULT = os.path.join(BASE_DIR, "data/results/rules_recommendations")
-LINKS_PATH = os.path.join(BASE_DIR, "data/raw/links.csv")
+RULES_RESULT = os.path.join(BASE_DIR, "checkpoints/model_1_rulesv3/rules_with_id.parquet")
+LINKS_PATH = os.path.join(BASE_DIR, "data/links.csv")
 
 API_KEY: str = "ff48b02cdcd1f6e40df93cb3ff292031"
 BASE_URL: str = "https://api.themoviedb.org/3"
