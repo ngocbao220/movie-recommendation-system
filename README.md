@@ -1,2 +1,3 @@
 # movie-recommendation-system
-Datamining
+
+1. ALS (Alternating Least Squares) is a popular algorithm used in collaborative filtering for recommendation systems. It works by factorizing the user-item interaction matrix into two lower-dimensional matrices, representing users and items in a latent feature space. The algorithm alternates between fixing one matrix and solving for the other, minimizing the reconstruction error of the original matrix.

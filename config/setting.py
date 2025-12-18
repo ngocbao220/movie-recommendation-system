@@ -14,7 +14,7 @@ METADATA_PATH = os.path.join(MODEL_DIR, 'metadata.parquet')
 
 # --- TỐI ƯU HÓA THAM SỐ (QUAN TRỌNG) ---
 
-    # 1. Giảm số lượng user để chạy nhanh hơn
+# 1. Giảm số lượng user để chạy nhanh hơn
 # KHUYẾN NGHỊ:
 # - 30k-50k users: An toàn, chạy trong 10-20 phút
 # - 100k users: Rủi ro cao, có thể treo
@@ -30,3 +30,11 @@ MIN_SUPPORT = 0.06  # TĂNG từ 0.02 để an toàn hơn
 
 # 3. Confidence giữ nguyên hoặc giảm nhẹ
 MIN_CONFIDENCE = 0.3
+
+# =================== CẤU HÌNH CHO MODEL 2: ALS ===================
+
+INPUT_PATH = "data/processed/model2_als"
+RESULT_PATH = "data/results/als_recommendations" # Nơi lưu kết quả cuối cùng cho App
+MODEL_SAVE_PATH = "outputs/model_2_als"
+
+NUMBER_RECOMMENDATIONS = 10  # Số gợi ý cho mỗi user

@@ -1,1 +1,0 @@
-Chạy thử nghiệm và so sánh hiệu suất

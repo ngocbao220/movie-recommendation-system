@@ -1,91 +1,74 @@
 import os
 import sys
+
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+if PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, PROJECT_ROOT)
+
 from pyspark.sql import SparkSession
-from pyspark.ml.recommendation import ALS, ALSModel
-from pyspark.ml.evaluation import RegressionEvaluator
+from pyspark.ml.recommendation import ALS
+from pyspark.sql import functions as F
 
-# --- CẤU HÌNH ---
-INPUT_PATH = "data/processed/model2_als"
-OUTPUT_PATH = "outputs/model_2_als"
-
-def check_model_exists():
-    """Kiểm tra xem thư mục model đã tồn tại và có nội dung chưa"""
-    if os.path.exists(OUTPUT_PATH):
-        # Kiểm tra xem folder có chứa metadata/data (đặc trưng của Spark model) không
-        if os.path.exists(os.path.join(OUTPUT_PATH, "metadata")):
-            return True
-    return False
+from config.setting import NUMBER_RECOMMENDATIONS, INPUT_PATH, RESULT_PATH, MODEL_SAVE_PATH
 
 def main():
-    # 1. KIỂM TRA MODEL TRƯỚC
-    if check_model_exists():
-        print(f"✅ Model ALS đã tồn tại tại '{OUTPUT_PATH}'.")
-        
-        # Nếu chạy trong Docker hoặc môi trường tự động
-        if not sys.stdin.isatty():
-            print("🤖 Docker detected: Bỏ qua bước training.")
-            return
-            
-        # Nếu chạy thủ công bên ngoài
-        retrain = input("❓ Bạn có muốn train lại không? (y/n): ").lower()
-        if retrain != 'y':
-            print("🚀 Sử dụng model cũ. Kết thúc.")
-            return
-
-    # 2. KHỞI TẠO SPARK (Chỉ khởi tạo khi thực sự cần train)
-    print("🚀 Đang khởi động Spark cho Model 2 (ALS)...")
+    # 1. Khởi tạo Spark
     spark = SparkSession.builder \
-        .appName("Train_Model_2_ALS") \
+        .appName("ALS_Final_Recommendations") \
         .config("spark.driver.memory", "8g") \
         .config("spark.executor.memory", "8g") \
         .getOrCreate()
 
     try:
-        # 3. Load dữ liệu
-        if not os.path.exists(INPUT_PATH):
-            print(f"❌ Lỗi: Không thấy dữ liệu đầu vào tại {INPUT_PATH}")
-            return
-
+        # 2. Đọc dữ liệu đã xử lý
         print(f"📂 Đang đọc dữ liệu từ {INPUT_PATH}...")
         df = spark.read.parquet(INPUT_PATH)
+
+        # 3. Cấu hình & Train ALS
+        # Lưu ý: Ở đây dùng toàn bộ dữ liệu để train (không split) 
+        # vì mục tiêu là tạo gợi ý tốt nhất cho dữ liệu tĩnh hiện có.
+        print("⏳ Đang train mô hình ALS...")
+        als = ALS(
+            maxIter=15, 
+            rank=20, 
+            regParam=0.1, 
+            userCol="userId", 
+            itemCol="movieId", 
+            ratingCol="rating",
+            coldStartStrategy="drop",
+            nonnegative=True
+        )
+        model = als.fit(df)
+
+        # 4. TẠO GỢI Ý CHO TẤT CẢ USER (recommendForAllUsers)
+        print("🎯 Đang tạo Top 10 gợi ý cho mỗi người dùng...")
+        # Hàm này trả về DataFrame: [userId, recommendations]
+        # recommendations là một mảng các struct: [movieId, rating]
+        userRecs = model.recommendForAllUsers(NUMBER_RECOMMENDATIONS)
+
+        # 5. BIẾN ĐỔI DỮ LIỆU ĐỂ APP DỄ ĐỌC (Flatten)
+        # Chuyển từ mảng struct phức tạp sang mảng ID phim đơn giản: [id1, id2, id3...]
+        userRecs_simple = userRecs.withColumn(
+            "recommendations", 
+            F.col("recommendations.movieId")
+        )
+
+        # 6. LƯU KẾT QUẢ
+        print(f"💾 Đang lưu bảng tra cứu vào {RESULT_PATH}...")
+        userRecs_simple.write.mode("overwrite").parquet(RESULT_PATH)
         
-        # Chia tập train/test
-        (training, test) = df.randomSplit([0.8, 0.2], seed=42)
-        training.cache()
-        print(f"✅ Đã load dữ liệu. Training set: {training.count()} dòng.")
+        # Opendional: Lưu cả model nếu bạn vẫn muốn dùng sau này
+        model.write().overwrite().save(MODEL_SAVE_PATH)
 
-        # 4. Cấu hình thuật toán ALS
-        als = ALS(maxIter=10, 
-                  rank=10,
-                  regParam=0.1, 
-                  userCol="userId", 
-                  itemCol="movieId", 
-                  ratingCol="rating",
-                  coldStartStrategy="drop",
-                  nonnegative=True)
-
-        # 5. Train
-        print("⏳ Đang train mô hình ALS (Matrix Factorization)...")
-        model = als.fit(training)
-
-        # 6. Đánh giá lỗi (RMSE)
-        print("📊 Đang đánh giá độ chính xác trên tập Test...")
-        predictions = model.transform(test)
-        evaluator = RegressionEvaluator(metricName="rmse", labelCol="rating", predictionCol="prediction")
-        rmse = evaluator.evaluate(predictions)
+        print("✅ Đã xuất kết quả thành công!")
         
-        print(f"🎉 Kết quả: Root-mean-square error (RMSE) = {rmse:.4f}")
-
-        # 7. Lưu Model
-        print(f"💾 Đang lưu model vào {OUTPUT_PATH}...")
-        model.write().overwrite().save(OUTPUT_PATH)
-        print("✅ Lưu thành công!")
+        # Debug thử 5 dòng đầu
+        userRecs_simple.show(5, truncate=False)
 
     except Exception as e:
-        print(f"❌ Lỗi khi training: {e}")
+        print(f"❌ Lỗi: {e}")
     finally:
         spark.stop()
-        print("🔌 Spark Session đã đóng.")
 
 if __name__ == "__main__":
     main()

@@ -25,7 +25,8 @@ services:
       bash -c "
       echo '⏳ Train Model ALS...' &&
       python models/model_2_als/train.py &&
-      echo '✅ ALS xong!'
+      echo 'Training modle ALS xong!' &&
+      echo 'Đã ghi dữ liệu recommendationForAllUsers (10 movies rcm)!'
       "
       
 # echo '⏳ Train Model Rules...' &&

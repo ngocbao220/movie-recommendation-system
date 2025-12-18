@@ -12,9 +12,6 @@ OUTPUT_PATH = "data/processed"
 MODEL_PATHS = {
     "m1": os.path.join(OUTPUT_PATH, "model1_rules"),
     "m2": os.path.join(OUTPUT_PATH, "model2_als"),
-    "m3": os.path.join(OUTPUT_PATH, "model3_ncf"),
-    "m3_u_map": os.path.join(OUTPUT_PATH, "model3_ncf_user_mapping"),
-    "m3_m_map": os.path.join(OUTPUT_PATH, "model3_ncf_movie_mapping")
 }
 
 # Ngưỡng lọc dữ liệu
@@ -94,26 +91,26 @@ def main():
         df_clean.select("userId", "movieId", "rating").write.mode("overwrite").parquet(MODEL_PATHS["m2"])
 
         # --- NHÁNH 3: NEURAL CF (DEEP LEARNING) ---
-        print("🛠  Xử lý Model 3 (Neural CF)...")
-        # Indexing liên tục cho User và Movie
-        u_indexer = StringIndexer(inputCol="userId", outputCol="userIndex").fit(df_clean)
-        m_indexer = StringIndexer(inputCol="movieId", outputCol="movieIndex").fit(df_clean)
+        # print("🛠  Xử lý Model 3 (Neural CF)...")
+        # # Indexing liên tục cho User và Movie
+        # u_indexer = StringIndexer(inputCol="userId", outputCol="userIndex").fit(df_clean)
+        # m_indexer = StringIndexer(inputCol="movieId", outputCol="movieIndex").fit(df_clean)
         
-        df_ncf = u_indexer.transform(df_clean)
-        df_ncf = m_indexer.transform(df_ncf)
+        # df_ncf = u_indexer.transform(df_clean)
+        # df_ncf = m_indexer.transform(df_ncf)
         
-        # Lưu dữ liệu chính
-        df_ncf.select(
-            F.col("userIndex").cast("integer"), 
-            F.col("movieIndex").cast("integer"), 
-            F.col("rating")
-        ).write.mode("overwrite").parquet(MODEL_PATHS["m3"])
+        # # Lưu dữ liệu chính
+        # df_ncf.select(
+        #     F.col("userIndex").cast("integer"), 
+        #     F.col("movieIndex").cast("integer"), 
+        #     F.col("rating")
+        # ).write.mode("overwrite").parquet(MODEL_PATHS["m3"])
         
-        # Lưu Mapping để tra cứu sau này
-        spark.createDataFrame([(i, ) for i in u_indexer.labels], ["original_userId"]) \
-            .write.mode("overwrite").parquet(MODEL_PATHS["m3_u_map"])
-        spark.createDataFrame([(i, ) for i in m_indexer.labels], ["original_movieId"]) \
-            .write.mode("overwrite").parquet(MODEL_PATHS["m3_m_map"])
+        # # Lưu Mapping để tra cứu sau này
+        # spark.createDataFrame([(i, ) for i in u_indexer.labels], ["original_userId"]) \
+        #     .write.mode("overwrite").parquet(MODEL_PATHS["m3_u_map"])
+        # spark.createDataFrame([(i, ) for i in m_indexer.labels], ["original_movieId"]) \
+        #     .write.mode("overwrite").parquet(MODEL_PATHS["m3_m_map"])
 
         print(f"\n🎉 HOÀN TẤT! Dữ liệu sạch đã được lưu tại: {OUTPUT_PATH}")
 
