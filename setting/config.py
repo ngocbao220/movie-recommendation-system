@@ -31,6 +31,18 @@ MIN_SUPPORT = 0.06  # TĂNG từ 0.02 để an toàn hơn
 # 3. Confidence giữ nguyên hoặc giảm nhẹ
 MIN_CONFIDENCE = 0.3
 
+
+# =================== CẤU HÌNH CHO ĐƯỜNG DẪN ===================
+ALS_RESULT = os.path.join(BASE_DIR, "data/results/als_recommendations")
+RULES_RESULT = os.path.join(BASE_DIR, "data/results/rules_recommendations")
+LINKS_PATH = os.path.join(BASE_DIR, "data/raw/links.csv")
+
+API_KEY: str = "ff48b02cdcd1f6e40df93cb3ff292031"
+BASE_URL: str = "https://api.themoviedb.org/3"
+IMAGE_BASE_W300: str = "https://image.tmdb.org/t/p/w300"
+IMAGE_BASE_W500: str = "https://image.tmdb.org/t/p/w500"
+IMAGE_BASE_W1280: str = "https://image.tmdb.org/t/p/w1280"
+
 # =================== CẤU HÌNH CHO MODEL 2: ALS ===================
 
 INPUT_PATH = "data/processed/model2_als"

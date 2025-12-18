@@ -36,7 +36,17 @@ services:
       preprocess-data:
         condition: service_completed_successfully
 
-  # 3. APP: Web Giao diện
+  # 4. APP: Web API
+  api:
+    container_name: web-api
+    build: .
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./:/app
+    command: uvicorn src.api.main:app --host 0.0.0.0 --port 8000
+
+  # 4. APP: Web Giao diện
   app:
     container_name: web-app
     build: .
@@ -45,7 +55,7 @@ services:
     volumes:
       - ./:/app
     # Streamlit sẽ tự động reload khi file model thay đổi, nên cứ chạy song song
-    command: streamlit run src/ui/main.py --server.port=8501 --server.address=0.0.0.0
+    command: python -m streamlit run src/ui/main.py --server.port=8501 --server.address=0.0.0.0
     depends_on:
       models-training:
         condition: service_completed_successfully

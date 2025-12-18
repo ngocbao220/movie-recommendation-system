@@ -18,3 +18,5 @@ pandas
 requests
 httpx
 asyncio
+
+streamlit
