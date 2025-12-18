@@ -9,13 +9,13 @@ from pyspark.sql import functions as F
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
-from setting.config import NUMBER_RECOMMENDATIONS, INPUT_PATH, RESULT_PATH, MODEL_SAVE_PATH
+from setting.config import NUMBER_RECOMMENDATIONS, INPUT_PATH_2, RESULT_PATH_2, MODEL_SAVE_PATH_2, RESULT_PATH_2
 
 def check_results_exist():
     """Kiểm tra xem file kết quả gợi ý đã tồn tại chưa"""
-    if os.path.exists(RESULT_PATH):
+    if os.path.exists(RESULT_PATH_2):
         # Kiểm tra xem thư mục có file parquet (thường là folder không rỗng)
-        if os.listdir(RESULT_PATH):
+        if os.listdir(RESULT_PATH_2):
             return True
     return False
 
@@ -29,7 +29,7 @@ def main():
     results_exist = check_results_exist()
     
     if results_exist and not args.train:
-        print(f"✅ Dữ liệu gợi ý đã tồn tại tại: {RESULT_PATH}")
+        print(f"✅ Dữ liệu gợi ý đã tồn tại tại: {RESULT_PATH_2}")
         print("🚀 Bỏ qua bước training. (Sử dụng --train nếu muốn train lại)")
         return
 
@@ -45,13 +45,12 @@ def main():
 
     try:
         # 3. Đọc dữ liệu đã xử lý
-        if not os.path.exists(INPUT_PATH):
-            print(f"❌ Lỗi: Không tìm thấy dữ liệu đầu vào tại {INPUT_PATH}")
+        if not os.path.exists(INPUT_PATH_2):
+            print(f"❌ Lỗi: Không tìm thấy dữ liệu đầu vào tại {INPUT_PATH_2}")
             return
 
-        print(f"📂 Đang đọc dữ liệu từ {INPUT_PATH}...")
-        df = spark.read.parquet(INPUT_PATH)
-
+        print(f"📂 Đang đọc dữ liệu từ {INPUT_PATH_2}...")
+        df = spark.read.parquet(INPUT_PATH_2)
         # 4. Cấu hình & Train ALS
         print("⏳ Đang train mô hình ALS...")
         als = ALS(
@@ -77,13 +76,12 @@ def main():
         )
 
         # 7. LƯU KẾT QUẢ
-        print(f"💾 Đang lưu bảng tra cứu vào {RESULT_PATH}...")
-        userRecs_simple.write.mode("overwrite").parquet(RESULT_PATH)
+        print(f"💾 Đang lưu bảng tra cứu vào {RESULT_PATH_2}...")
+        userRecs_simple.write.mode("overwrite").parquet(RESULT_PATH_2)
         
         # Lưu model
-        print(f"💾 Đang lưu model vào {MODEL_SAVE_PATH}...")
-        model.write().overwrite().save(MODEL_SAVE_PATH)
-
+        print(f"💾 Đang lưu model vào {MODEL_SAVE_PATH_2}...")
+        model.write().overwrite().save(MODEL_SAVE_PATH_2)
         print("✅ Đã xuất kết quả thành công!")
         userRecs_simple.show(5, truncate=False)
 

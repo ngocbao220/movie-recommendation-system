@@ -44,9 +44,8 @@ IMAGE_BASE_W500: str = "https://image.tmdb.org/t/p/w500"
 IMAGE_BASE_W1280: str = "https://image.tmdb.org/t/p/w1280"
 
 # =================== CẤU HÌNH CHO MODEL 2: ALS ===================
-
-INPUT_PATH = "data/processed/model2_als"
-RESULT_PATH = "data/results/als_recommendations" # Nơi lưu kết quả cuối cùng cho App
-MODEL_SAVE_PATH = "outputs/model_2_als"
+INPUT_PATH_2 = "data/processed/model2_als"
+RESULT_PATH_2 = "data/results/als_recommendations" # Nơi lưu kết quả cuối cùng cho App
+MODEL_SAVE_PATH_2 = "checkpoints/model_2_als"
 
 NUMBER_RECOMMENDATIONS = 10  # Số gợi ý cho mỗi user
