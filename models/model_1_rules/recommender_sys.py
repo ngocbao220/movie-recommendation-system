@@ -165,6 +165,6 @@ if __name__ == "__main__":
     
     # 2. Test phim từng bị lỗi rỗng (Sẽ dùng Content Only)
     # Kỳ vọng: Ra Iron Man 2, Avengers...
-    print(rec.recommend("The Lion King (1994)"))
+    print(rec.recommend("Titanic (1997)"))
     
     # 3. Test phim hành động (Kiểm tra xem có bị lái

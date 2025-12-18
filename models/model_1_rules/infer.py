@@ -2,7 +2,7 @@ import pandas as pd
 import os
 
 # Đường dẫn file luật đã train
-ARTIFACT_PATH = "checkpoints/model_1_rulesv3/rules.parquet"
+ARTIFACT_PATH = "checkpoints/model_1_rulesv4/rules.parquet"
 
 class AssociationRecommender:
     def __init__(self):
@@ -22,7 +22,7 @@ class AssociationRecommender:
         else:
             print(f"⚠️ Cảnh báo: Chưa tìm thấy file luật tại {ARTIFACT_PATH}. Hãy chạy train.py trước.")
 
-    def recommend(self, movie_name, top_k=5):
+    def recommend(self, movie_name, top_k=10):
         """
         Input: Tên phim (VD: 'Toy Story (1995)')
         Output: List các phim gợi ý
@@ -75,6 +75,6 @@ if __name__ == "__main__":
     # Test thử
     rec = AssociationRecommender()
     # Bạn có thể đổi tên phim khác để test
-    movie = "Forrest Gump (1994)" 
+    movie = "Spider-Man (2002)" 
     print(f"Gợi ý cho '{movie}':")
     print(rec.recommend(movie))

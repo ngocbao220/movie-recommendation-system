@@ -9,7 +9,7 @@ from pyspark.sql import functions as F
 
 # --- CẤU HÌNH ---
 INPUT_PATH = "data/processed/model1_rules"
-OUTPUT_PATH = "checkpoints/model_1_rulesv3/rules.parquet" # Đổi tên folder v3
+OUTPUT_PATH = "checkpoints/model_1_rulesv4/rules.parquet" # Đổi tên folder v3
 TEMP_DIR = os.path.join(os.getcwd(), "spark_temp_data") 
 
 # --- CẤU HÌNH "GROWTH MODE" (PHONG PHÚ HƠN) ---
@@ -18,14 +18,14 @@ TEMP_DIR = os.path.join(os.getcwd(), "spark_temp_data")
 USER_SAMPLE_FRACTION = 1.0 
 
 # 2. Giảm Support xuống 2% để bắt được nhiều phim hơn
-MIN_SUPPORT = 0.02
+MIN_SUPPORT = 0.015
 
-# 3. Giảm Confidence xuống 30% để luật đa dạng hơn
-MIN_CONFIDENCE = 0.3    
+# 3. Giảm Confidence xuống 20% để luật đa dạng hơn
+MIN_CONFIDENCE = 0.4    
 
 # 4. Tăng Lift lên 1.2 chút để lọc bớt luật "nhảm" (trùng ngẫu nhiên)
 # Luật phong phú cần đi đôi với chất lượng, Lift > 1.2 là ngưỡng đẹp.
-MIN_LIFT = 1.2           
+MIN_LIFT = 2.0           
 
 # 5. Giữ nguyên giới hạn 50 phim/user để bảo vệ RAM
 MAX_ITEMS_PER_USER = 50   
@@ -93,6 +93,7 @@ def main():
         # Lọc luật ngay trên luồng xử lý
         rules = rules.filter(F.size(F.col("antecedent")) <= 2)
         rules = rules.filter(F.col("lift") >= MIN_LIFT)
+        rules = rules.filter(F.col("support") >= 0.005)
         
         # Chia nhỏ file đầu ra để tránh lỗi ghi đĩa
         rules = rules.repartition(5)
