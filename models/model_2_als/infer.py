@@ -4,9 +4,9 @@ from pyspark.ml.recommendation import ALSModel
 from pyspark.sql.functions import col
 
 # --- CẤU HÌNH ---
-MODEL_PATH = "outputs/model_2_als"
-MOVIES_CSV = "data/raw/movies.csv"
-RATINGS_CSV = "data/raw/ratings.csv"
+MODEL_PATH = "checkpoints/model_2_als"  # Đổi từ outputs sang checkpoints
+MOVIES_CSV = "data/movies.csv"
+RATINGS_CSV = "data/ratings.csv"
 
 class ALSRecommender:
     def __init__(self):

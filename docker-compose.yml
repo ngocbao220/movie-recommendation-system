@@ -44,22 +44,51 @@ services:
   api:
     container_name: web-api
     build: .
+  # Backend: FastAPI serving ML models
+  backend:
+    container_name: movie-backend
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
     ports:
-      - "8000:8000"
+      - "8001:8001"
     volumes:
-      - ./:/app
-    command: uvicorn src.api.main:app --host 0.0.0.0 --port 8000
+      - ./src:/app/src
+      - ./models:/app/models
+      - ./data:/app/data
+      - ./checkpoints:/app/checkpoints
+      - ./setting:/app/setting
+    environment:
+      - PYTHONUNBUFFERED=1
+      - TMDB_API_KEY=ff48b02cdcd1f6e40df93cb3ff292031
+    command: python src/ui/api.py
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/api/movies/popular"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    networks:
+      - movie-network
 
-  # 4. APP: Web Giao diện
-  app:
-    container_name: web-app
-    build: .
+  # Frontend: React + Vite
+  frontend:
+    container_name: movie-frontend
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
     ports:
-      - "8501:8501"
+      - "3000:3000"
     volumes:
-      - ./:/app
-    # Streamlit sẽ tự động reload khi file model thay đổi, nên cứ chạy song song
-    command: python -m streamlit run src/ui/main.py --server.port=8501 --server.address=0.0.0.0
+      - ./frontend/src:/app/src
+      - ./frontend/public:/app/public
+    environment:
+      - VITE_API_URL=http://localhost:8001
     depends_on:
-      models-training:
-        condition: service_completed_successfully
+      backend:
+        condition: service_healthy
+    networks:
+      - movie-network
+
+networks:
+  movie-network:
+    driver: bridge
