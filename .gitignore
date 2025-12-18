@@ -1,6 +1,7 @@
 /data
 /venv
 /checkpoints
+models/model_2_als/artifacts
 __pycache__/
 *.py[cod]
 *$py.class
