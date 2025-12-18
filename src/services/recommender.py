@@ -50,3 +50,41 @@ class RecommenderService:
             # Giả sử cột kết quả trong parquet của bạn tên là 'items' (như script trước)
             return list(self.rules_df.loc[movie_id, "items"])
         return []
+
+    def get_popular_movies(self, top_n: int = 20, min_ratings: int = 5, ratings_path: str = None):
+        """
+        Trả về danh sách phim phổ biến nhất theo số lượng đánh giá.
+
+        - top_n: số lượng kết quả trả về
+        - min_ratings: lọc những phim có ít nhất `min_ratings` lượt đánh giá
+        - ratings_path: đường dẫn tới file ratings.csv (mặc định tìm `data/raw/ratings.csv` dưới working dir)
+
+        Trả về list các dict với các keys: movieId, tmdbId (nếu có), count, avg_rating
+        """
+        if ratings_path is None:
+            ratings_path = os.path.join(os.getcwd(), "data", "raw", "ratings.csv")
+
+        if not os.path.exists(ratings_path):
+            return []
+
+        df = pd.read_csv(ratings_path)
+        grp = (
+            df.groupby("movieId").rating
+            .agg(["count", "mean"]).reset_index()
+            .rename(columns={"count": "count", "mean": "avg_rating"})
+        )
+        grp = grp[grp["count"] >= min_ratings]
+        grp = grp.sort_values(["count", "avg_rating"], ascending=[False, False])
+        top = grp.head(top_n)
+
+        results = []
+        for _, row in top.iterrows():
+            movie_id = int(row["movieId"])
+            results.append({
+                "movieId": movie_id,
+                "tmdbId": self.get_tmdb_id(movie_id),
+                "count": int(row["count"]),
+                "avg_rating": float(row["avg_rating"]),
+            })
+
+        return results

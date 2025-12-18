@@ -27,7 +27,7 @@ function App() {
   useEffect(() => {
     const fetchPopularMovies = async () => {
       try {
-        const response = await axios.get('/api/movies/popular');
+        const response = await axios.get('/api/movie/popular/list');
         setPopularMovies(response.data);
       } catch (err) {
         console.error('Lỗi khi lấy phim nổi bật:', err);

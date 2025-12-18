@@ -1,14 +1,13 @@
-# Cho Model Rules (Rules)
-mlxtend
-numpy==1.20.0
-pandas
+# Spark (ALS)
+pyspark==3.3.2
 
-# Cho Model ALS (Spark)
-pyspark==3.5.0
+# Rules
+mlxtend==0.23.1
+numpy==1.23.5
+pandas==1.5.3
 
-# Cho Giao diện 
-fastapi
-uvicorn[standard]
+# API
+fastapi==0.110.0
+uvicorn
 requests
 httpx
-asyncio
