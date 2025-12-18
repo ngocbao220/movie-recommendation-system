@@ -23,18 +23,22 @@ services:
       - ./:/app
     command: >
       bash -c "
-      echo '⏳ Train Model ALS...' &&
+      echo '⏳ Train Model 1 (Rules)...' &&
+      python models/model_1_rules/train.py &&
+      echo '✅ Model 1 xong!' &&
+      
+      echo '⏳ Train Model 2 (ALS)...' &&
       python models/model_2_als/train.py &&
-      echo 'Training modle ALS xong!' &&
-      echo 'Đã ghi dữ liệu recommendationForAllUsers (10 movies rcm)!'
+      echo '✅ Model 2 xong!'
       "
+    depends_on:
+      preprocess-data:
+        condition: service_completed_successfully
       
 # echo '⏳ Train Model Rules...' &&
 # python models/model_1_rules/train.py &&
 # echo '✅ Rules xong!'
-    depends_on:
-      preprocess-data:
-        condition: service_completed_successfully
+    
 
   # 4. APP: Web API
   api:

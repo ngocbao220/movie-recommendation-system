@@ -1,8 +1,11 @@
 import os
+import re
 import sys
 from pyspark.sql import SparkSession
 from pyspark.sql import functions as F
 from pyspark.ml.feature import StringIndexer
+from pyspark.sql.types import StringType
+from pyspark.sql.window import Window
 
 # --- CẤU HÌNH ---
 RAW_PATH = "data/raw"
@@ -18,6 +21,15 @@ MODEL_PATHS = {
 MIN_USER_RATINGS = 5
 MIN_MOVIE_RATINGS = 10
 MIN_RATING_FOR_RULES = 3.5
+
+def clean_title_logic(title):
+    if not title: return title
+    title = title.strip()
+    match = re.match(r'^(.*),\s(The|A|An|Les|Le|La)\s\((\d{4})\)$', title)
+    if match: return f"{match.group(2)} {match.group(1)} ({match.group(3)})"
+    match_no_year = re.match(r'^(.*),\s(The|A|An|Les|Le|La)$', title)
+    if match_no_year: return f"{match_no_year.group(2)} {match_no_year.group(1)}"
+    return title
 
 def check_processed_data():
     """Kiểm tra xem dữ liệu sạch cho cả 3 model đã tồn tại chưa"""
@@ -62,6 +74,8 @@ def main():
         print("📂 Đang đọc dữ liệu thô...")
         df_ratings = spark.read.csv(os.path.join(RAW_PATH, "ratings.csv"), header=True, inferSchema=True)
         df_movies = spark.read.csv(os.path.join(RAW_PATH, "movies.csv"), header=True, inferSchema=True)
+        clean_title_udf = F.udf(clean_title_logic, StringType())
+        df_movies = df_movies.withColumn("title", clean_title_udf(F.col("title")))
 
         # --- LỌC DỮ LIỆU CHUNG ---
         print(f"🧹 Đang lọc (User >= {MIN_USER_RATINGS} rates, Movie >= {MIN_MOVIE_RATINGS} rates)...")
@@ -77,15 +91,45 @@ def main():
         print(f"✅ Dữ liệu sau lọc: {df_clean.count()} dòng.")
 
         # --- NHÁNH 1: ASSOCIATION RULES ---
-        print("🛠  Xử lý Model 1 (Association Rules)...")
-        df_rules = df_clean.filter(F.col("rating") >= MIN_RATING_FOR_RULES) \
-            .join(df_movies, "movieId", "inner")
+        print("\n🛠  Model 1 (Rules) - Hybrid Selection (Best + Recent)...")
+    
+        # Bước 1: Chỉ lấy phim User đã thích (Rating >= 3.5)
+        # Loại bỏ phim dở để tránh học luật sai
+        df_high_rating = df_clean.filter(F.col("rating") >= 3.5)
         
-        df_transactions = df_rules.groupBy("userId") \
-            .agg(F.collect_list("title").alias("items"))
+        # Join lấy tên phim
+        df_rules_joined = df_high_rating.join(df_movies, "movieId", "inner") \
+                                        .select("userId", "title", "rating", "timestamp")
         
-        df_transactions.write.mode("overwrite").parquet(MODEL_PATHS["m1"])
-
+        # Cửa sổ 1: Xếp theo Rating giảm dần (Ưu tiên phim 5 sao)
+        # Nếu rating bằng nhau, phim nào mới hơn xếp trước
+        w_best = Window.partitionBy("userId").orderBy(F.col("rating").desc(), F.col("timestamp").desc())
+        
+        # Cửa sổ 2: Xếp theo Thời gian giảm dần (Ưu tiên phim mới xem)
+        w_recent = Window.partitionBy("userId").orderBy(F.col("timestamp").desc())
+        
+        df_ranked = df_rules_joined \
+            .withColumn("rank_best", F.row_number().over(w_best)) \
+            .withColumn("rank_recent", F.row_number().over(w_recent))
+        
+        # LẤY HỢP (UNION) CỦA 2 NHÓM:
+        # - Nhóm 1: Top 30 phim hay nhất (Giữ huyền thoại)
+        # - Nhóm 2: Top 20 phim mới nhất (Giữ xu hướng)
+        # Tổng cộng tối đa 50 phim/user (Nếu phim vừa hay vừa mới thì càng tốt)
+        df_smart_selected = df_ranked.filter(
+            (F.col("rank_best") <= 50) 
+        )
+        
+        # Bước 3: Gom nhóm
+        # Dùng collect_set để tự động khử trùng lặp (nếu phim nằm trong cả 2 top)
+        df_transactions = df_smart_selected.groupBy("userId") \
+                                        .agg(F.collect_set("title").alias("items"))
+        
+        # Lưu ra disk
+        path_m1 = os.path.join(OUTPUT_PATH, "model1_rules")
+        df_transactions.write.mode("overwrite").parquet(path_m1)
+        
+        print(f"✅ Model 1 Saved: Đã chọn lọc tinh hoa .")
         # --- NHÁNH 2: SPARK ALS ---
         print("🛠  Xử lý Model 2 (Spark ALS)...")
         df_clean.select("userId", "movieId", "rating").write.mode("overwrite").parquet(MODEL_PATHS["m2"])
