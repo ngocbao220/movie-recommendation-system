@@ -29,12 +29,22 @@ class TMDBService:
                     "language": "vi-VN",
                     "append_to_response": "images"
                 },
-                timeout=15.0
+                timeout=30.0
             )
             res.raise_for_status()
             return res.json()
+        except httpx.HTTPStatusError as e:
+            # Only log 404 as warning, others as errors
+            if e.response.status_code == 404:
+                logger.warning(f"⚠️ Movie {tmdb_id} not found in TMDB")
+            else:
+                logger.error(f"❌ HTTP error {e.response.status_code} for movie {tmdb_id}: {str(e)}")
+            return {}
+        except httpx.TimeoutException:
+            logger.error(f"⏱️ Timeout while fetching movie {tmdb_id}")
+            return {}
         except Exception as e:
-            logger.error(f"Lỗi khi lấy thông tin phim {tmdb_id}: {e}")
+            logger.error(f"❌ Unexpected error for movie {tmdb_id}: {type(e).__name__} - {str(e)}")
             return {}
 
     async def get_trailer_key(self, client: httpx.AsyncClient, tmdb_id: int):
@@ -46,7 +56,7 @@ class TMDBService:
                     "api_key": self.api_key,
                     "language": "en-US" # Trailer thường để en-US sẽ đầy đủ hơn
                 },
-                timeout=15.0
+                timeout=30.0
             )
             res.raise_for_status()
             data = res.json().get("results", [])
@@ -60,11 +70,15 @@ class TMDBService:
                 if v["site"] == "YouTube":
                     return v["key"]
             return None
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code != 404:
+                logger.warning(f"⚠️ HTTP {e.response.status_code} while fetching trailer for movie {tmdb_id}")
+            return None
         except Exception as e:
-            logger.error(f"Lỗi khi lấy trailer phim {tmdb_id}: {e}")
+            logger.error(f"❌ Error fetching trailer for movie {tmdb_id}: {type(e).__name__} - {str(e)}")
             return None
 
-    async def get_movie_detail(self, client: httpx.AsyncClient, tmdb_id: int):
+    async def get_movie_detail(self, client: httpx.AsyncClient, tmdb_id: int, movie_id: int = None):
         """Hàm tổng hợp để trả về dữ liệu tinh gọn cho Frontend"""
         # Gọi song song 2 API nhỏ để tối ưu thời gian (nếu cần tách biệt)
         # Tuy nhiên ở đây gọi tuần tự vì get_movie_detail cần dữ liệu từ info
@@ -75,7 +89,7 @@ class TMDBService:
         trailer_key = await self.get_trailer_key(client, tmdb_id)
 
         # Trích lọc dữ liệu cần thiết
-        return {
+        result = {
             "title": m.get("title"),
             "original_title": m.get("original_title"),
             "release_date": m.get("release_date"),
@@ -91,3 +105,10 @@ class TMDBService:
                 if m.get("images", {}).get("logos") else None
             )
         }
+        
+        # Add movieId if provided
+        if movie_id is not None:
+            result["id"] = movie_id
+            result["movieId"] = movie_id
+            
+        return result

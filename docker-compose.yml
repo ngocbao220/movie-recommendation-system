@@ -22,7 +22,7 @@ services:
     command: >
       bash -c "
       echo '⏳ Train Model 1 (Rules)...' &&
-      python models/model_1_rules/train.py &&
+      python models/model_1_rules/train.py --train &&
       echo '✅ Model 1 xong!' &&
 
       echo '⏳ Train Model 2 (ALS)...' &&
@@ -66,7 +66,7 @@ services:
       - ./frontend/src:/app/src
       - ./frontend/public:/app/public
     environment:
-      - VITE_API_URL=http://localhost:8001
+      - VITE_API_URL=http://web-api:8000
     depends_on:
       - api
     networks:
